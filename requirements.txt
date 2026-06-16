@@ -1,0 +1,9 @@
+streamlit==1.36.0
+pandas==2.2.2
+requests==2.32.3
+
+# 安装命令：
+# pip install -r requirements.txt
+
+# 运行命令：
+# streamlit run app.py
