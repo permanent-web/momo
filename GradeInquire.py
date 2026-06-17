@@ -12,7 +12,7 @@ st.set_page_config(
     page_title="学生个人模考学情查询&智能助手系统",
     page_icon="📚",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"  # 展开侧边栏显示API配置
 )
 
 # ==================== 数据加载 ====================
@@ -178,6 +178,83 @@ if "all_chat_history" not in st.session_state:
 # 当前对话的消息列表
 if "current_messages" not in st.session_state:
     st.session_state.current_messages = []
+# 用户输入的API密钥（临时存储，不持久化）
+if "user_api_key" not in st.session_state:
+    st.session_state.user_api_key = ""
+# 用户输入的Base URL
+if "user_base_url" not in st.session_state:
+    st.session_state.user_base_url = DEFAULT_BASE_URL
+# 用户输入的模型名称
+if "user_model" not in st.session_state:
+    st.session_state.user_model = DEFAULT_MODEL
+
+# ==================== 侧边栏API配置 ====================
+def render_api_config_sidebar():
+    """渲染侧边栏API配置"""
+    with st.sidebar:
+        st.header("⚙️ API配置")
+        st.markdown("---")
+        
+        # API状态显示
+        has_local_key = bool(DEFAULT_API_KEY)
+        has_user_key = bool(st.session_state.user_api_key)
+        
+        if has_local_key:
+            st.success("📁 已加载本地.env配置")
+        elif has_user_key:
+            st.success("🔐 已配置用户API Key")
+        else:
+            st.warning("⚠️ 未配置API密钥")
+        
+        st.markdown("---")
+        
+        # API Key输入
+        st.session_state.user_api_key = st.text_input(
+            "🔑 API Key", 
+            type="password", 
+            value=st.session_state.user_api_key,
+            placeholder="输入您的DeepSeek API Key",
+            help="从DeepSeek官网获取API Key"
+        )
+        
+        # Base URL输入
+        st.session_state.user_base_url = st.text_input(
+            "🌐 Base URL",
+            value=st.session_state.user_base_url,
+            placeholder="https://api.deepseek.com",
+            help="API服务器地址"
+        )
+        
+        # 模型名称输入
+        st.session_state.user_model = st.text_input(
+            "🤖 模型名称",
+            value=st.session_state.user_model,
+            placeholder="deepseek-chat",
+            help="使用的模型名称"
+        )
+        
+        st.markdown("---")
+        
+        # API状态总结
+        effective_key = st.session_state.user_api_key if st.session_state.user_api_key else DEFAULT_API_KEY
+        if effective_key:
+            st.success("✅ API已就绪，将调用AI助手")
+        else:
+            st.error("❌ 无有效API密钥，将使用规则引擎")
+        
+        # 获取有效配置
+        def get_api_config():
+            """获取当前有效的API配置"""
+            return {
+                "api_key": st.session_state.user_api_key if st.session_state.user_api_key else DEFAULT_API_KEY,
+                "base_url": st.session_state.user_base_url if st.session_state.user_base_url else DEFAULT_BASE_URL,
+                "model": st.session_state.user_model if st.session_state.user_model else DEFAULT_MODEL
+            }
+        
+        return get_api_config
+
+# 渲染侧边栏
+get_api_config = render_api_config_sidebar()
 
 # ==================== 辅助函数 ====================
 def get_chat_history_file(student_id):
@@ -636,6 +713,15 @@ def show_student_detail_page():
     with right_col:
         st.subheader("🤖 AI 智能学习助手")
         
+        # 显示当前API配置状态
+        api_config = get_api_config()
+        if api_config["api_key"]:
+            st.success("🔮 AI助手已就绪")
+        else:
+            st.info("💡 请在左侧侧边栏配置API密钥")
+        
+        st.markdown("---")
+        
         # 对话历史管理
         st.markdown("**对话管理**")
         history_col1, history_col2 = st.columns(2)
@@ -700,10 +786,19 @@ def show_student_detail_page():
                 message_placeholder = st.empty()
                 full_response = ""
                 
+                # 获取API配置
+                api_config = get_api_config()
+                api_key_to_use = api_config["api_key"]
+                
                 # 如果有API密钥，调用DeepSeek API
-                if DEFAULT_API_KEY:
+                if api_key_to_use:
                     # 流式输出
-                    for chunk in call_deepseek_api_stream(prompt, student_row, DEFAULT_API_KEY, DEFAULT_BASE_URL, DEFAULT_MODEL):
+                    for chunk in call_deepseek_api_stream(
+                        prompt, student_row, 
+                        api_key_to_use, 
+                        api_config["base_url"], 
+                        api_config["model"]
+                    ):
                         if chunk is None:
                             break
                         full_response += chunk
