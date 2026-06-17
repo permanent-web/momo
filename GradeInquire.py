@@ -85,8 +85,25 @@ def build_student_context(student_data):
 
 def call_deepseek_api_stream(prompt, student_data, api_key, base_url, model_name):
     """调用DeepSeek API生成智能回复（流式输出）"""
-    if not api_key or not base_url or not model_name:
-        return None
+    # 清理密钥中的空白字符
+    api_key = api_key.strip() if api_key else ""
+    base_url = base_url.strip() if base_url else ""
+    model_name = model_name.strip() if model_name else ""
+    
+    if not api_key:
+        st.error("❌ 请先配置API密钥，可在侧边栏输入您的DeepSeek API Key")
+        yield None
+        return
+    
+    if not base_url or not model_name:
+        st.error("❌ API配置不完整，请检查Base URL和模型名称")
+        yield None
+        return
+    
+    if not api_key.startswith("sk-"):
+        st.error("❌ API密钥格式不正确，DeepSeek API Key应以'sk-'开头")
+        yield None
+        return
     
     # 构建系统提示词
     system_prompt = build_student_context(student_data)
@@ -117,7 +134,15 @@ def call_deepseek_api_stream(prompt, student_data, api_key, base_url, model_name
         
         if response.status_code != 200:
             error_msg = response.text[:500] if len(response.text) > 500 else response.text
-            st.error(f"❌ API调用失败：{response.status_code} - {error_msg}")
+            # 特殊处理401错误
+            if response.status_code == 401:
+                st.error("❌ API密钥无效或已过期，请检查您的DeepSeek API Key是否正确")
+            elif response.status_code == 403:
+                st.error("❌ API访问被拒绝，请检查您的API密钥权限")
+            elif response.status_code == 429:
+                st.error("❌ API请求过于频繁，请稍后再试")
+            else:
+                st.error(f"❌ API调用失败（{response.status_code}）：{error_msg}")
             yield None
             return
         
@@ -236,19 +261,19 @@ def render_api_config_sidebar():
         st.markdown("---")
         
         # API状态总结
-        effective_key = st.session_state.user_api_key if st.session_state.user_api_key else DEFAULT_API_KEY
+        effective_key = st.session_state.user_api_key.strip() if st.session_state.user_api_key else DEFAULT_API_KEY
         if effective_key:
             st.success("✅ API已就绪，将调用AI助手")
         else:
-            st.error("❌ 无有效API密钥，将使用规则引擎")
+            st.info("💡 无API密钥时，系统将使用规则引擎回答问题")
         
         # 获取有效配置
         def get_api_config():
             """获取当前有效的API配置"""
             return {
-                "api_key": st.session_state.user_api_key if st.session_state.user_api_key else DEFAULT_API_KEY,
-                "base_url": st.session_state.user_base_url if st.session_state.user_base_url else DEFAULT_BASE_URL,
-                "model": st.session_state.user_model if st.session_state.user_model else DEFAULT_MODEL
+                "api_key": st.session_state.user_api_key.strip() if st.session_state.user_api_key else DEFAULT_API_KEY,
+                "base_url": st.session_state.user_base_url.strip() if st.session_state.user_base_url else DEFAULT_BASE_URL,
+                "model": st.session_state.user_model.strip() if st.session_state.user_model else DEFAULT_MODEL
             }
         
         return get_api_config
